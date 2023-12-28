@@ -19,12 +19,20 @@ fn pack_dir(exe_name: &OsStr, dir: &Path, resource_storage: &mut HashMap<String,
         if entry.path().is_dir() {
             pack_dir(exe_name, entry.path().as_path(), resource_storage);
         } else {
-            resource_storage.insert(
-                entry.file_name().to_string_lossy().to_string(),
-                fs::read(entry.path()).unwrap(),
-            );
-
-            println!("Packed {}", entry.path().to_string_lossy());
+            if resource_storage
+                .insert(
+                    entry.file_name().to_string_lossy().to_string(),
+                    fs::read(entry.path()).unwrap(),
+                )
+                .is_some()
+            {
+                println!(
+                    "Warning, duplicate name! {}",
+                    entry.path().to_string_lossy()
+                );
+            } else {
+                println!("Packed {}", entry.path().to_string_lossy());
+            }
         }
     }
 }
