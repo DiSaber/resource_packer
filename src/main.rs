@@ -1,6 +1,39 @@
-use std::{collections::HashMap, ffi::OsStr, fs, path::Path};
+use std::{
+    collections::HashMap,
+    ffi::OsStr,
+    fs,
+    path::{Component, Path, PathBuf},
+};
 
-fn pack_dir(exe_name: &OsStr, dir: &Path, resource_storage: &mut HashMap<String, Vec<u8>>) {
+// From: https://github.com/danreeves/path-clean
+pub fn clean_path(path: &Path) -> PathBuf {
+    let mut out = Vec::new();
+
+    for comp in path.components() {
+        match comp {
+            Component::CurDir => (),
+            Component::ParentDir => match out.last() {
+                Some(Component::RootDir) => (),
+                Some(Component::Normal(_)) => {
+                    out.pop();
+                }
+                None
+                | Some(Component::CurDir)
+                | Some(Component::ParentDir)
+                | Some(Component::Prefix(_)) => out.push(comp),
+            },
+            comp => out.push(comp),
+        }
+    }
+
+    if !out.is_empty() {
+        out.iter().collect()
+    } else {
+        PathBuf::from(".")
+    }
+}
+
+fn pack_dir(exe_name: &OsStr, dir: &Path, resource_storage: &mut HashMap<PathBuf, Vec<u8>>) {
     for entry in fs::read_dir(dir).unwrap() {
         let Ok(entry) = entry else {
             continue;
@@ -19,20 +52,9 @@ fn pack_dir(exe_name: &OsStr, dir: &Path, resource_storage: &mut HashMap<String,
         if entry.path().is_dir() {
             pack_dir(exe_name, entry.path().as_path(), resource_storage);
         } else {
-            if resource_storage
-                .insert(
-                    entry.file_name().to_string_lossy().to_string(),
-                    fs::read(entry.path()).unwrap(),
-                )
-                .is_some()
-            {
-                println!(
-                    "Warning, duplicate name! {}",
-                    entry.path().to_string_lossy()
-                );
-            } else {
-                println!("Packed {}", entry.path().to_string_lossy());
-            }
+            let cleaned_path = clean_path(&entry.path());
+            resource_storage.insert(cleaned_path.clone(), fs::read(entry.path()).unwrap());
+            println!("Packed {}", cleaned_path.to_string_lossy());
         }
     }
 }
@@ -41,7 +63,7 @@ fn main() {
     let exe_path = std::env::current_exe().unwrap();
     let exe_name = exe_path.file_name().unwrap();
 
-    let mut resource_storage: HashMap<String, Vec<u8>> = HashMap::new();
+    let mut resource_storage: HashMap<PathBuf, Vec<u8>> = HashMap::new();
 
     pack_dir(exe_name, "./".as_ref(), &mut resource_storage);
 
