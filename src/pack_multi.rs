@@ -11,26 +11,26 @@ pub fn pack_multi() {
     let exe_path = std::env::current_exe().unwrap();
     let exe_name = exe_path.file_name().unwrap();
 
-    let resource_sizes = read_dir(Path::new("./"), exe_name);
+    let resource_paths = read_dir(Path::new("./"), exe_name);
 
     let _ = fs::remove_dir_all("./resources");
     fs::create_dir("./resources").unwrap();
 
     let mut index_file: HashMap<PathBuf, u64> = HashMap::new();
 
-    for (file_index, path) in resource_sizes.iter().enumerate() {
+    for (file_index, path) in resource_paths.iter().enumerate() {
         index_file.insert(path.to_path_buf(), file_index as u64);
-
-        println!(
-            "Packed {} in resource_{file_index}.pck",
-            path.to_string_lossy()
-        );
 
         fs::copy(
             Path::new("./").join(&path),
             format!("./resources/resource_{file_index}.pck"),
         )
         .unwrap();
+
+        println!(
+            "Packed {} in resource_{file_index}.pck",
+            path.to_string_lossy()
+        );
     }
 
     fs::write(
@@ -41,7 +41,7 @@ pub fn pack_multi() {
 }
 
 fn read_dir(dir: &Path, exe_name: &OsStr) -> Vec<PathBuf> {
-    let mut resource_sizes = Vec::new();
+    let mut resource_paths = Vec::new();
 
     for entry in fs::read_dir(dir).unwrap() {
         let Ok(entry) = entry else {
@@ -59,12 +59,12 @@ fn read_dir(dir: &Path, exe_name: &OsStr) -> Vec<PathBuf> {
         }
 
         if entry.path().is_dir() {
-            resource_sizes.append(&mut read_dir(&entry.path(), exe_name));
+            resource_paths.extend(read_dir(&entry.path(), exe_name))
         } else {
             let cleaned_path = clean_path(&entry.path());
-            resource_sizes.push(cleaned_path.clone());
+            resource_paths.push(cleaned_path);
         }
     }
 
-    resource_sizes
+    resource_paths
 }

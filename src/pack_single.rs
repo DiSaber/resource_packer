@@ -11,15 +11,13 @@ pub fn pack_single() {
     let exe_path = std::env::current_exe().unwrap();
     let exe_name = exe_path.file_name().unwrap();
 
-    fs::write(
-        "./resources.pck",
-        bincode::serialize(&read_dir(Path::new("./"), exe_name)).unwrap(),
-    )
-    .unwrap();
+    let resources = read_dir(Path::new("./"), exe_name);
+
+    fs::write("./resources.pck", bincode::serialize(&resources).unwrap()).unwrap();
 }
 
 fn read_dir(dir: &Path, exe_name: &OsStr) -> HashMap<PathBuf, Vec<u8>> {
-    let mut resource_storage = HashMap::new();
+    let mut resources = HashMap::new();
 
     for entry in fs::read_dir(dir).unwrap() {
         let Ok(entry) = entry else {
@@ -37,13 +35,13 @@ fn read_dir(dir: &Path, exe_name: &OsStr) -> HashMap<PathBuf, Vec<u8>> {
         }
 
         if entry.path().is_dir() {
-            resource_storage.extend(read_dir(&entry.path(), exe_name))
+            resources.extend(read_dir(&entry.path(), exe_name))
         } else {
             let cleaned_path = clean_path(&entry.path());
-            resource_storage.insert(cleaned_path.clone(), fs::read(entry.path()).unwrap());
+            resources.insert(cleaned_path.clone(), fs::read(entry.path()).unwrap());
             println!("Packed {}", cleaned_path.to_string_lossy());
         }
     }
 
-    resource_storage
+    resources
 }
