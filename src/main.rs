@@ -1,3 +1,4 @@
+use clap::Parser;
 use std::{
     collections::HashMap,
     ffi::OsStr,
@@ -33,7 +34,9 @@ pub fn clean_path(path: &Path) -> PathBuf {
     }
 }
 
-fn pack_dir(exe_name: &OsStr, dir: &Path, resource_storage: &mut HashMap<PathBuf, Vec<u8>>) {
+fn read_dir(dir: &Path, exe_name: &OsStr) -> Vec<(PathBuf, u64)> {
+    let mut resource_sizes = Vec::new();
+
     for entry in fs::read_dir(dir).unwrap() {
         let Ok(entry) = entry else {
             continue;
@@ -50,26 +53,71 @@ fn pack_dir(exe_name: &OsStr, dir: &Path, resource_storage: &mut HashMap<PathBuf
         }
 
         if entry.path().is_dir() {
-            pack_dir(exe_name, entry.path().as_path(), resource_storage);
+            resource_sizes.append(&mut read_dir(&entry.path(), exe_name));
         } else {
             let cleaned_path = clean_path(&entry.path());
-            resource_storage.insert(cleaned_path.clone(), fs::read(entry.path()).unwrap());
-            println!("Packed {}", cleaned_path.to_string_lossy());
+            resource_sizes.push((
+                cleaned_path.clone(),
+                fs::metadata(entry.path()).unwrap().len(),
+            ));
         }
     }
+
+    resource_sizes
 }
 
 fn main() {
+    let max_file_size = Args::parse().max_file_size;
+
     let exe_path = std::env::current_exe().unwrap();
     let exe_name = exe_path.file_name().unwrap();
 
-    let mut resource_storage: HashMap<PathBuf, Vec<u8>> = HashMap::new();
+    let resource_sizes = read_dir(Path::new("./"), exe_name);
 
-    pack_dir(exe_name, "./".as_ref(), &mut resource_storage);
+    let _ = fs::remove_dir_all("./resources");
+    fs::create_dir("./resources").unwrap();
+
+    let mut index_file: HashMap<PathBuf, u64> = HashMap::new();
+    let mut current_file_size = 0_u64;
+    let mut current_resource_file: HashMap<PathBuf, Vec<u8>> = HashMap::new();
+    let mut current_file_index = 0_u64;
+
+    for (i, (path, file_size)) in resource_sizes.iter().enumerate() {
+        index_file.insert(path.to_path_buf(), current_file_index);
+        current_resource_file.insert(
+            path.to_path_buf(),
+            fs::read(Path::new("./").join(&path)).unwrap(),
+        );
+        current_file_size += file_size;
+
+        println!(
+            "Packed {} in resource_{current_file_index}.pck",
+            path.to_string_lossy()
+        );
+
+        // Write the resources if the file size exceeds the max file size or when the last iteration of the loop is reached
+        if current_file_size > max_file_size || i == resource_sizes.len() - 1 {
+            fs::write(
+                format!("./resources/resource_{current_file_index}.pck"),
+                bincode::serialize(&current_resource_file).unwrap(),
+            )
+            .unwrap();
+            current_file_size = 0;
+            current_resource_file.clear();
+            current_file_index += 1;
+        }
+    }
 
     fs::write(
-        "./resources.pck",
-        bincode::serialize(&resource_storage).unwrap(),
+        format!("./resources/resource_index.pck"),
+        bincode::serialize(&index_file).unwrap(),
     )
     .unwrap();
+}
+
+#[derive(Parser, Debug)]
+struct Args {
+    /// The file size threshold, in bytes, for writing resource files. Defaults to 1MB
+    #[arg(short, long, default_value_t = 1_000_000)]
+    max_file_size: u64,
 }
