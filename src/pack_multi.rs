@@ -21,9 +21,10 @@ pub fn pack_multi() {
     for (file_index, path) in resource_paths.iter().enumerate() {
         index_file.insert(path.to_path_buf(), file_index as u64);
 
-        fs::copy(
-            Path::new("./").join(&path),
+        // Doesn't use `fs::copy` so file permissions aren't copied
+        fs::write(
             format!("./resources/resource_{file_index}.pck"),
+            fs::read(Path::new("./").join(&path)).unwrap(),
         )
         .unwrap();
 
